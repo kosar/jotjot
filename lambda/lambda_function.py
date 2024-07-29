@@ -530,44 +530,8 @@ def lambda_handler(event, context):
         # get current time and format into a friendly string 
         current_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
         daily_maintenance_log=current_time + ' - Daily maintenance task event.'
-        target_email = event.get('target_email', None)
-
-        if target_email and target_email != 'None':
-            # Get a count of the number of items in the dynamo DB tables "jotjot_UserEmailPreferences" and "JotJotLogs"
-            table = dynamodb.Table('jotjot_UserEmailPreferences')
-            response = table.scan()
-            user_email_preferences_count = response['Count']
-            daily_maintenance_log += '\nuser_email_preferences_count: ' + str(user_email_preferences_count)
-
-            table = dynamodb.Table('JotJotLogs')
-            response = table.scan()
-            jotjot_logs_count = response['Count']
-            daily_maintenance_log += '\njotjot_logs_count: ' + str(jotjot_logs_count)
-
-            logger.info ('target_email: ' + target_email)
-            responseID = DailyReportHandler.send_email(SENDER_EMAIL, target_email, 'Maintenance Log ' + str(current_time), daily_maintenance_log )
-            logger.info('Email sent with response ID: ' + responseID + ' at time: ' + current_time)
-
-            if daily_maintenance_log:
-                logger.info ('\n----daily_maintenance_log: ')
-                logger.info (daily_maintenance_log)
-        else:
-            logger.info('No target email specified in the event, logging locally as a maintenance check.')
-            logger.info ('\n----daily_maintenance_log: ')
-
-            # for non-email maintenance tasks that run synchronously and log to the console
-            user_id=event.get('user_id', None)
-            if user_id:
-                logger.info('user_id: ' + user_id)
-                logger.info ('user email address: ' + str(DailyReportHandler.get_user_email_address(user_id)))
-                logger.info ('user email preference: ' + str(get_user_email_preference(user_id)))
-                logger.info ('Warning this next part could be big, getting all log activity for user_id: ' + user_id)
-                logger.info (str(DailyReportHandler.get_all_user_log_entries(user_id)))
-            else:
-                logger.info ('No user_id specified in the event, getting all log activity for all users')
-                logger.info (str(DailyReportHandler.get_all_user_log_entries()))
-
         logger.info('Daily maintenance task event handled.', extra={'event': event})
+        # TODO: return the log to the caller
         return {'statusCode': 200, 'body': 'Daily maintenance task process completed.'}
     else:
         logger.info('Normal skill invocation.')
