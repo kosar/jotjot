@@ -70,7 +70,7 @@ class LaunchRequestHandler(AbstractRequestHandler):
                 'first_seen': datetime.utcnow().isoformat()
             })
             # Full welcome message for first-time users
-            speak_output = f"Welcome to {SKILL_NAME}. Log anything by starting with 'I am...' like I am taking my vitamins."
+            speak_output = f"Welcome to {SKILL_NAME}. Log anything by starting with 'Log that...' For example, you can say 'Open Daily Log, and log that I am taking my vitamins'."
         else:
             # Shorter message for repeat users
             speak_output = "Welcome back. What are you doing?"
@@ -331,7 +331,15 @@ class DailyReportHandler:
                 query_params['FilterExpression'] = Attr('user_id').eq(user_id)  # Use FilterExpression for user_id
             
             response = table.query(**query_params)
-            return response['Items']
+            items = response['Items']
+            logger.info(f"get_all_user_log_entries_for_date: Found {len(items)} log entries for date {date}")
+            try:
+                items.sort(key=lambda x: x['timestamp'])  # Added sorting by timestamp
+            except Exception as e:
+                logger.error(f"get_all_user_log_entries_for_date: Error sorting items by timestamp: {str(e)}")
+                # continuing even if sorting fails
+
+            return items
         except Exception as e:
             logger.error(f"get_all_user_log_entries_for_date: Error fetching log entries for date {date}: {str(e)}")
             return []
