@@ -294,13 +294,7 @@ class DailyReportHandler:
                 # If there are logs, send the email report
                 if response_items:
                     logger.info(f"send_daily_report: Creating daily report for {yesterday} to {email} consisting of {len(response_items)} items")
-                    body = f"Hello! Here's a summary of your activity from {yesterday}:\n\n"
-                    for item in response_items:
-                        timestamp = item['timestamp']
-                        parsed_timestamp = datetime.fromisoformat(timestamp)
-                        formatted_timestamp = parsed_timestamp.strftime('%B %d, %Y at %I:%M %p')
-                        body += f"{formatted_timestamp}: {item['utterance']}\n"
-                    body += f"\nTo disable these reports from {SKILL_NAME}, say 'stop sending reports' when using the skill."
+                    body = DailyReportHandler.create_html_email_body(yesterday, response_items, SKILL_NAME, "https://github.com/kosar/jotjot/issues/new")
                     
                     if dry_run:
                         status_email = True
@@ -379,22 +373,64 @@ class DailyReportHandler:
     @staticmethod
     def send_email(source, to_address, subject, body):
         try:
+            source_with_name = f"Alexa Skill - {SKILL_NAME} - <{source}>"
             response = ses.send_email(
-                Source=source,
+                Source=source_with_name,
                 Destination={'ToAddresses': [to_address]},
                 Message={
                     'Subject': {'Data': subject},
-                    'Body': {'Text': {'Data': body}}
+                    'Body': {'Html': {'Data': body}}
                 }
             )
             logger.info(f"Email sent to {to_address}! Message ID: {response['MessageId']}")
-            # extract any other info from the response object that could be useful for debugging why emails are not arriving 
             logger.info(f"Response in send_email: {response}")
-
             return response['MessageId']
         except ClientError as e:
             logger.error(f"An error occurred sending email to {to_address}: {e.response['Error']['Message']}")
             return False
+    
+    @staticmethod
+    def create_html_email_body(date, logs, skill_name, github_issues_link):
+        body = f"""
+        <html>
+        <head>
+            <style>
+                body {{ font-family: Arial, sans-serif; }}
+                .header {{ background-color: #f8f9fa; padding: 10px; text-align: center; }}
+                .content {{ margin: 20px; }}
+                .footer {{ background-color: #f8f9fa; padding: 10px; text-align: center; font-size: 12px; }}
+                .log-entry {{ margin-bottom: 10px; }}
+                .timestamp {{ font-weight: bold; }}
+            </style>
+        </head>
+        <body>
+            <div class="header">
+                <h2>{skill_name} Daily Report</h2>
+            </div>
+            <div class="content">
+                <p>Hello! Here's a summary of your activity from {date}:</p>
+                <ul>
+        """
+        for item in logs:
+            timestamp = item['timestamp']
+            parsed_timestamp = datetime.fromisoformat(timestamp)
+            formatted_timestamp = parsed_timestamp.strftime('%B %d, %Y at %I:%M %p')
+            body += f"""
+                <li class="log-entry">
+                    <span class="timestamp">{formatted_timestamp}:</span> {item['utterance']}
+                </li>
+            """
+        body += f"""
+                </ul>
+                <p>To disable these reports from {skill_name}, say 'Disable sending daily reports email' when using the skill.'</p>
+            </div>
+            <div class="footer">
+                <p>If you encounter any issues, please <a href="{github_issues_link}">file an issue</a>.</p>
+            </div>
+        </body>
+        </html>
+        """
+        return body
 
 class StopReportsIntentHandler(AbstractRequestHandler):
     def can_handle(self, handler_input):
