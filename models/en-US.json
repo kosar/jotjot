@@ -1,0 +1,95 @@
+{
+    "interactionModel": {
+        "languageModel": {
+            "invocationName": "daily log",
+            "intents": [
+                {
+                    "name": "AMAZON.CancelIntent",
+                    "samples": []
+                },
+                {
+                    "name": "AMAZON.HelpIntent",
+                    "samples": []
+                },
+                {
+                    "name": "AMAZON.StopIntent",
+                    "samples": []
+                },
+                {
+                    "name": "LogActivityIntent",
+                    "slots": [
+                        {
+                            "name": "utterance",
+                            "type": "AMAZON.SearchQuery"
+                        }
+                    ],
+                    "samples": [
+                        "please log that {utterance}",
+                        "enter into the log {utterance}",
+                        "I am applying {utterance}",
+                        "I'm {utterance}",
+                        "Record that {utterance}",
+                        "I am taking {utterance}",
+                        "I'm taking {utterance}",
+                        "I'm applying {utterance}",
+                        "Log {utterance}",
+                        "Jot down {utterance}",
+                        "Note that {utterance}"
+                    ]
+                },
+                {
+                    "name": "AMAZON.NavigateHomeIntent",
+                    "samples": []
+                },
+                {
+                    "name": "ToggleEmailSummaryIntent",
+                    "slots": [
+                        {
+                            "name": "toggle_state",
+                            "type": "toggle_state"
+                        }
+                    ],
+                    "samples": [
+                        "email summaries {toggle_state}",
+                        "{toggle_state} email summaries",
+                        "turn email summaries {toggle_state}",
+                        "turn {toggle_state} email summaries"
+                    ]
+                },
+                {
+                    "name": "GrantEmailPermissionIntent",
+                    "slots": [],
+                    "samples": [
+                        "begin sending me reports"
+                    ]
+                },
+                {
+                    "name": "StopReportsIntent",
+                    "slots": [],
+                    "samples": [
+                        "turn off daily reports",
+                        "stop sending reports",
+                        "disable email reports"
+                    ]
+                }
+            ],
+            "types": [
+                {
+                    "name": "toggle_state",
+                    "values": [
+                        {
+                            "name": {
+                                "value": "off"
+                            }
+                        },
+                        {
+                            "name": {
+                                "value": "on"
+                            }
+                        }
+                    ]
+                }
+            ]
+        }
+    }
+}

@@ -1,0 +1,77 @@
+{
+    "interactionModel": {
+        "languageModel": {
+            "invocationName": "daily log",
+            "intents": [
+                {
+                    "name": "AMAZON.CancelIntent",
+                    "samples": []
+                },
+                {
+                    "name": "AMAZON.HelpIntent",
+                    "samples": []
+                },
+                {
+                    "name": "AMAZON.StopIntent",
+                    "samples": []
+                },
+                {
+                    "name": "LogActivityIntent",
+                    "slots": [
+                        {
+                            "name": "utterance",
+                            "type": "AMAZON.SearchQuery"
+                        }
+                    ],
+                    "samples": [
+                        "Note that {utterance}",
+                        "Add {utterance}",
+                        "log that {utterance}",
+                        "add that {utterance}",
+                        "please log that {utterance}",
+                        "enter into the log {utterance}",
+                        "Record that {utterance}"
+                    ]
+                },
+                {
+                    "name": "AMAZON.NavigateHomeIntent",
+                    "samples": []
+                },
+                {
+                    "name": "GrantEmailPermissionIntent",
+                    "slots": [],
+                    "samples": [
+                        "enable sending logs to my email",
+                        "enable sending me daily logs to my email",
+                        "send me daily log reports to my email",
+                        "send daily log reports to my email"
+                    ]
+                },
+                {
+                    "name": "StopReportsIntent",
+                    "slots": [],
+                    "samples": [
+                        "Disable sending daily reports email"
+                    ]
+                }
+            ],
+            "types": [
+                {
+                    "name": "toggle_state",
+                    "values": [
+                        {
+                            "name": {
+                                "value": "off"
+                            }
+                        },
+                        {
+                            "name": {
+                                "value": "on"
+                            }
+                        }
+                    ]
+                }
+            ]
+        }
+    }
+}
