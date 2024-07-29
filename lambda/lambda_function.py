@@ -70,7 +70,7 @@ class LaunchRequestHandler(AbstractRequestHandler):
                 'first_seen': datetime.utcnow().isoformat()
             })
             # Full welcome message for first-time users
-            speak_output = f"Welcome to {SKILL_NAME}. Log anything by starting with 'Log that...' For example, 'Alexa Open daily log and log that I am taking my vitamins'."
+            speak_output = f"Welcome to {SKILL_NAME}. Log anything by starting with 'Log that...' For example, you can say 'Open Daily Log, and log that I am taking my vitamins'."
         else:
             # Shorter message for repeat users
             speak_output = "Welcome back. What are you doing?"
