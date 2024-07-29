@@ -60,6 +60,7 @@ If you encounter any issues while using Daily Log, try the following steps:
 
 If the issue persists, you can reach out to our support team for further assistance: dailylog -at- jaffboys dot com
 
-## Conclusion
+You can also file an issue directly in this github repository [here](https://github.com/kosar/jotjot/issues/new)
+## Go Forth And Forget Nothing!
 
 Daily Log is a convenient way to log your daily activities using voice commands. We hope this guide helps you get started with using the skill. Enjoy logging with Daily Log!
