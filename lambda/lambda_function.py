@@ -262,16 +262,22 @@ class CatchAllExceptionHandler(AbstractExceptionHandler):
 
 class DailyReportHandler:
     @staticmethod
-    def send_daily_report(dry_run=False):
+    def send_daily_report(dry_run=False, user_id=None):
         try:
             # Scan the email preferences table for users who have enabled email summaries
             preferences_table = dynamodb.Table('jotjot_UserEmailPreferences')
-            response = preferences_table.scan(
-                FilterExpression=boto3.dynamodb.conditions.Attr('email_summary_enabled').eq(True)
-            )
-            eligible_users = response['Items']
+            
+            if user_id:  # If user_id is provided, fetch email preference for that user
+                response = preferences_table.get_item(Key={'user_id': user_id})
+                eligible_users = [response['Item']] if 'Item' in response and response['Item'].get('email_summary_enabled', False) else []
+            else:  # Otherwise, fetch all users with email summaries enabled
+                response = preferences_table.scan(
+                    FilterExpression=boto3.dynamodb.conditions.Attr('email_summary_enabled').eq(True)
+                )
+                eligible_users = response['Items']
+            
             logger.info(f"send_daily_report: Found {len(eligible_users)} users with email summaries enabled")
-
+            
             # Loop through eligible users
             for user in eligible_users:
                 user_id = user['user_id']
@@ -279,31 +285,29 @@ class DailyReportHandler:
                 if not email:
                     logger.error(f"send_daily_report: User {user_id} has no email address set up")
                     continue
-
+                
                 # Fetch logs for the user from yesterday
                 yesterday = (datetime.now() - timedelta(days=1)).strftime('%Y-%m-%d')
                 response_items = DailyReportHandler.get_all_user_log_entries_for_date(yesterday, user_id=user_id)
                 logger.info(f"send_daily_report: Found {len(response_items)} logs for user {user_id} on {yesterday}")
-
+                
                 # If there are logs, send the email report
                 if response_items:
                     logger.info(f"send_daily_report: Creating daily report for {yesterday} to {email} consisting of {len(response_items)} items")
-                    body = f"{SKILL_NAME} Daily Report for {yesterday}:\n\n"
-                    # Add a short blurb to orient the user to this report
-                    body += f"Here's a summary of your activity from {yesterday}:\n\n"
+                    body = f"Hello! Here's a summary of your activity from {yesterday}:\n\n"
                     for item in response_items:
                         timestamp = item['timestamp']
                         parsed_timestamp = datetime.fromisoformat(timestamp)
                         formatted_timestamp = parsed_timestamp.strftime('%B %d, %Y at %I:%M %p')
                         body += f"{formatted_timestamp}: {item['utterance']}\n"
-                    
                     body += f"\nTo disable these reports from {SKILL_NAME}, say 'stop sending reports' when using the skill."
+                    
                     if dry_run:
                         status_email = True
                         logger.info(f"send_daily_report (dryrun): Skipping email send for email {email}")
                     else:
                         status_email = DailyReportHandler.send_email(SENDER_EMAIL, email, f"{SKILL_NAME} Report", body)
-
+                    
                     if not status_email:
                         logger.error(f"send_daily_report: Failed to send daily report to {email} for user {user_id}")
                     else:
@@ -311,7 +315,7 @@ class DailyReportHandler:
                             logger.info(f"send_daily_report: Successfully sent daily report to {email}")
                         else:
                             logger.info(f"send_daily_report (dryrun): Successful dry run to: {email}")
-                            logger.info (f"send_daily_report (dryrun): body: {body}")
+                            logger.info(f"send_daily_report (dryrun): body: {body}")
                             
         except Exception as e:
             logger.error(f"send_daily_report: Exception. Failed to send daily report: {str(e)}")
@@ -533,6 +537,15 @@ def lambda_handler(event, context):
         logger.info('Daily maintenance task event handled.', extra={'event': event})
         # TODO: return the log to the caller
         return {'statusCode': 200, 'body': 'Daily maintenance task process completed.'}
+    elif event.get('test_user_id_email_report'):
+        user_id = event.get('user_id')
+        if user_id:
+            logger.info(f"test_user_id_email_report: Sending daily report for user_id: {user_id}")
+            DailyReportHandler.send_daily_report(user_id=user_id)
+            return {'statusCode': 200, 'body': f'Daily report sent for user_id: {user_id}'}
+        else:
+            logger.error('test_user_id_email_report: user_id not provided in the event')
+            return {'statusCode': 400, 'body': 'user_id not provided'}
     else:
         logger.info('Normal skill invocation.')
 
