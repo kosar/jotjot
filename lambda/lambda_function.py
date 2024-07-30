@@ -2,6 +2,7 @@ import os
 import logging
 import json
 import boto3
+import time
 from botocore.exceptions import ClientError
 from boto3.dynamodb.conditions import Key, Attr  # Import conditions module
 from ask_sdk_core.skill_builder import SkillBuilder
@@ -49,6 +50,7 @@ def emit_maintenance_metrics(dynamodb_table_names, lambda_function_names):
     cloudwatch = boto3.client('cloudwatch')
     for function_name in lambda_function_names:
         try:
+            start_time = time.time()
             # Duration metrics
             response = cloudwatch.get_metric_statistics(
                 Namespace='AWS/Lambda',
@@ -62,8 +64,11 @@ def emit_maintenance_metrics(dynamodb_table_names, lambda_function_names):
             metrics[f'Lambda_{function_name}_AverageDuration'] = response['Datapoints'][0]['Average'] if response['Datapoints'] else 0
             metrics[f'Lambda_{function_name}_MaximumDuration'] = response['Datapoints'][0]['Maximum'] if response['Datapoints'] else 0
             metrics[f'Lambda_{function_name}_TotalDuration'] = response['Datapoints'][0]['Sum'] if response['Datapoints'] else 0
+            logger.info(f"Time taken for last day Duration count: {time.time() - start_time} seconds")
 
-            # Invocation count
+            start_time = time.time()
+
+            # Invocation count for the last day
             response = cloudwatch.get_metric_statistics(
                 Namespace='AWS/Lambda',
                 MetricName='Invocations',
@@ -73,7 +78,34 @@ def emit_maintenance_metrics(dynamodb_table_names, lambda_function_names):
                 Period=86400,
                 Statistics=['Sum']
             )
-            metrics[f'Lambda_{function_name}_InvocationCount'] = response['Datapoints'][0]['Sum'] if response['Datapoints'] else 0
+            last_day_invocations = response['Datapoints'][0]['Sum'] if response['Datapoints'] else 0
+            metrics[f'Lambda_{function_name}_InvocationCount'] = last_day_invocations
+            logger.info(f"Time taken for last day invocation count: {time.time() - start_time} seconds")
+
+            # Invocation counts for the previous 7 days
+            seven_day_invocations = []
+            for i in range(1, 8):
+                start_time = time.time()
+                response = cloudwatch.get_metric_statistics(
+                    Namespace='AWS/Lambda',
+                    MetricName='Invocations',
+                    Dimensions=[{'Name': 'FunctionName', 'Value': function_name}],
+                    StartTime=datetime.now(timezone.utc) - timedelta(days=i+1),
+                    EndTime=datetime.now(timezone.utc) - timedelta(days=i),
+                    Period=86400,
+                    Statistics=['Sum']
+                )
+                seven_day_invocations.append(response['Datapoints'][0]['Sum'] if response['Datapoints'] else 0)
+                logger.info(f"Time taken for day {i} invocation count: {time.time() - start_time} seconds")
+
+            # Calculate the average invocation count for the previous 7 days
+            average_seven_day_invocations = sum(seven_day_invocations) / len(seven_day_invocations) if seven_day_invocations else 0
+            metrics[f'Lambda_{function_name}_Average7DayInvocationCount'] = average_seven_day_invocations
+
+            # Compare last day's invocation count with the average of the previous 7 days
+            metrics[f'Lambda_{function_name}_InvocationComparison'] = (
+                f"Last day: {last_day_invocations}, Average of previous 7 days: {average_seven_day_invocations}"
+            )
 
             # Error count
             response = cloudwatch.get_metric_statistics(
