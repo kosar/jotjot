@@ -31,6 +31,94 @@ SKILL_NAME = os.environ.get('SKILL_NAME', 'Daily Log')
 # Add these environment variables
 SENDER_EMAIL = os.environ.get('SENDER_EMAIL', 'your_verified_email@example.com')
 
+def emit_maintenance_metrics(dynamodb_table_names, lambda_function_names):
+    metrics = {}
+    logger.info("Starting maintenance metrics collection")
+
+    # Collect DynamoDB metrics
+    dynamodb_client = boto3.client('dynamodb')
+    for table_name in dynamodb_table_names:
+        try:
+            response = dynamodb_client.describe_table(TableName=table_name)
+            metrics[f'DynamoDB_{table_name}_ItemCount'] = response['Table']['ItemCount']
+        except ClientError as e:
+            logger.error(f"Failed to get DynamoDB metrics for table {table_name}: {e.response['Error']['Message']}")
+            metrics[f'DynamoDB_{table_name}_ItemCount'] = 'Error'
+
+    # Collect Lambda metrics for specific functions
+    cloudwatch = boto3.client('cloudwatch')
+    for function_name in lambda_function_names:
+        try:
+            # Duration metrics
+            response = cloudwatch.get_metric_statistics(
+                Namespace='AWS/Lambda',
+                MetricName='Duration',
+                Dimensions=[{'Name': 'FunctionName', 'Value': function_name}],
+                StartTime=datetime.now(timezone.utc) - timedelta(days=1),
+                EndTime=datetime.now(timezone.utc),
+                Period=86400,
+                Statistics=['Average', 'Maximum', 'Sum']
+            )
+            metrics[f'Lambda_{function_name}_AverageDuration'] = response['Datapoints'][0]['Average'] if response['Datapoints'] else 0
+            metrics[f'Lambda_{function_name}_MaximumDuration'] = response['Datapoints'][0]['Maximum'] if response['Datapoints'] else 0
+            metrics[f'Lambda_{function_name}_TotalDuration'] = response['Datapoints'][0]['Sum'] if response['Datapoints'] else 0
+
+            # Invocation count
+            response = cloudwatch.get_metric_statistics(
+                Namespace='AWS/Lambda',
+                MetricName='Invocations',
+                Dimensions=[{'Name': 'FunctionName', 'Value': function_name}],
+                StartTime=datetime.now(timezone.utc) - timedelta(days=1),
+                EndTime=datetime.now(timezone.utc),
+                Period=86400,
+                Statistics=['Sum']
+            )
+            metrics[f'Lambda_{function_name}_InvocationCount'] = response['Datapoints'][0]['Sum'] if response['Datapoints'] else 0
+
+            # Error count
+            response = cloudwatch.get_metric_statistics(
+                Namespace='AWS/Lambda',
+                MetricName='Errors',
+                Dimensions=[{'Name': 'FunctionName', 'Value': function_name}],
+                StartTime=datetime.now(timezone.utc) - timedelta(days=1),
+                EndTime=datetime.now(timezone.utc),
+                Period=86400,
+                Statistics=['Sum']
+            )
+            metrics[f'Lambda_{function_name}_ErrorCount'] = response['Datapoints'][0]['Sum'] if response['Datapoints'] else 0
+
+            # Throttles
+            response = cloudwatch.get_metric_statistics(
+                Namespace='AWS/Lambda',
+                MetricName='Throttles',
+                Dimensions=[{'Name': 'FunctionName', 'Value': function_name}],
+                StartTime=datetime.now(timezone.utc) - timedelta(days=1),
+                EndTime=datetime.now(timezone.utc),
+                Period=86400,
+                Statistics=['Sum']
+            )
+            metrics[f'Lambda_{function_name}_ThrottleCount'] = response['Datapoints'][0]['Sum'] if response['Datapoints'] else 0
+
+        except ClientError as e:
+            logger.error(f"Failed to get CloudWatch Logs metrics for function {function_name}: {e.response['Error']['Message']}")
+            metrics[f'Lambda_{function_name}_Metrics'] = 'Error'
+
+    # Emit metrics
+    admin_email = os.getenv('admin_email')
+    if admin_email:
+        try:
+            body = "<br>".join([f"{key}: {value}" for key, value in metrics.items()])
+            DailyReportHandler.send_email(SENDER_EMAIL, admin_email, "Daily Maintenance Metrics", body)
+            logger.info(f"Metrics emailed to {admin_email}")
+        except Exception as e:
+            logger.error(f"Failed to send metrics email: {str(e)}")
+    else:
+        logger.info("Admin email not set, logging metrics")
+        for key, value in metrics.items():
+            logger.info(f"{key}: {value}")
+
+    logger.info("Maintenance metrics collection completed")
+
 def get_user_email_preference(user_id):
     try:
         table = dynamodb.Table('jotjot_UserEmailPreferences')
@@ -566,12 +654,12 @@ def lambda_handler(event, context):
         logger.info(f"Email summary enabled flag: {email_summary_enabled}")
         return {'statusCode': 200, 'body': f'Email summary enabled: {email_summary_enabled}'}
     elif event.get('daily_maintenance'):
-        # DailyMaintenanceTask.run()
-        # get current time and format into a friendly string 
-        current_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-        daily_maintenance_log=current_time + ' - Daily maintenance task event.'
         logger.info('Daily maintenance task event handled.', extra={'event': event})
-        # TODO: return the log to the caller
+        # TODO: fetch these next two constants from the event which will be supplied in eventbridge schedule payload
+        dynamodb_table_names = event.get('dynamodb_table_names', ['jotjot_UserEmailPreferences', 'JotJotLogs'])
+        lambda_function_names = event.get('lambda_function_names', ['JotJotFunction'])
+        logger.info('dynamodb_table_names: ' + str(dynamodb_table_names) + ' lambda_function_names: ' + str(lambda_function_names))
+        emit_maintenance_metrics(dynamodb_table_names, lambda_function_names)
         return {'statusCode': 200, 'body': 'Daily maintenance task process completed.'}
     elif event.get('test_user_id_email_report'):
         user_id = event.get('user_id')
