@@ -122,30 +122,6 @@ def emit_maintenance_metrics(dynamodb_table_names, lambda_function_names):
                 f"Last day: {last_day_invocations}, Average of previous 7 days: {average_seven_day_invocations}"
             )
 
-            # Error count
-            response = cloudwatch.get_metric_statistics(
-                Namespace='AWS/Lambda',
-                MetricName='Errors',
-                Dimensions=[{'Name': 'FunctionName', 'Value': function_name}],
-                StartTime=datetime.now(timezone.utc) - timedelta(days=1),
-                EndTime=datetime.now(timezone.utc),
-                Period=86400,
-                Statistics=['Sum']
-            )
-            metrics[f'Lambda_{function_name}_ErrorCount'] = response['Datapoints'][0]['Sum'] if response['Datapoints'] else 0
-
-            # Throttles
-            response = cloudwatch.get_metric_statistics(
-                Namespace='AWS/Lambda',
-                MetricName='Throttles',
-                Dimensions=[{'Name': 'FunctionName', 'Value': function_name}],
-                StartTime=datetime.now(timezone.utc) - timedelta(days=1),
-                EndTime=datetime.now(timezone.utc),
-                Period=86400,
-                Statistics=['Sum']
-            )
-            metrics[f'Lambda_{function_name}_ThrottleCount'] = response['Datapoints'][0]['Sum'] if response['Datapoints'] else 0
-
         except ClientError as e:
             logger.error(f"Failed to get CloudWatch Logs metrics for function {function_name}: {e.response['Error']['Message']}")
             metrics[f'Lambda_{function_name}_Metrics'] = 'Error'
