@@ -154,6 +154,14 @@ def emit_maintenance_metrics(dynamodb_table_names, lambda_function_names):
                         <td>{value}</td>
                     </tr>
                 """
+            # Add the overall time taken for maintenance metrics collection
+            overall_time_taken = time.time() - overall_start_time
+            body += f"""
+                <tr>
+                    <td>Maintenance Task Time Elapsed</td>
+                    <td>{overall_time_taken} seconds</td>
+                </tr>
+            """            
             body += """
                 </table>
             </body>
