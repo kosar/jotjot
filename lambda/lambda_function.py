@@ -148,6 +148,8 @@ def emit_maintenance_metrics(dynamodb_table_names, lambda_function_names):
                     </tr>
             """
             for key, value in metrics.items():
+                if isinstance(value, float):
+                    value = f"{value:.2f}"
                 body += f"""
                     <tr>
                         <td>{key}</td>
@@ -159,7 +161,7 @@ def emit_maintenance_metrics(dynamodb_table_names, lambda_function_names):
             body += f"""
                 <tr>
                     <td>Maintenance Task Time Elapsed</td>
-                    <td>{overall_time_taken} seconds</td>
+                    <td>{overall_time_taken:.2f} seconds</td>
                 </tr>
             """            
             body += """
@@ -174,10 +176,12 @@ def emit_maintenance_metrics(dynamodb_table_names, lambda_function_names):
     else:
         logger.info("Admin email not set, logging metrics")
         for key, value in metrics.items():
+            if isinstance(value, float):
+                value = f"{value:.2f}"
             logger.info(f"{key}: {value}")
 
     logger.info("Maintenance metrics collection completed")
-    logger.info(f"Overall time taken for maintenance metrics collection: {time.time() - overall_start_time} seconds")
+    logger.info(f"Overall time taken for maintenance metrics collection: {time.time() - overall_start_time:.2f} seconds")
 
 def get_user_email_preference(user_id):
     try:
@@ -714,12 +718,12 @@ def lambda_handler(event, context):
         logger.info(f"Email summary enabled flag: {email_summary_enabled}")
         return {'statusCode': 200, 'body': f'Email summary enabled: {email_summary_enabled}'}
     elif event.get('daily_maintenance'):
-        logger.info('Daily maintenance task event handled.', extra={'event': event})
         # TODO: fetch these next two constants from the event which will be supplied in eventbridge schedule payload
         dynamodb_table_names = event.get('dynamodb_table_names', ['jotjot_UserEmailPreferences', 'JotJotLogs'])
         lambda_function_names = event.get('lambda_function_names', ['JotJotFunction'])
         logger.info('dynamodb_table_names: ' + str(dynamodb_table_names) + ' lambda_function_names: ' + str(lambda_function_names))
         emit_maintenance_metrics(dynamodb_table_names, lambda_function_names)
+        logger.info('Daily maintenance task event handled.', extra={'event': event})
         return {'statusCode': 200, 'body': 'Daily maintenance task process completed.'}
     elif event.get('test_user_id_email_report'):
         user_id = event.get('user_id')
