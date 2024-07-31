@@ -118,6 +118,8 @@ def emit_maintenance_metrics(dynamodb_table_names, lambda_function_names):
             metrics[f'Lambda_{function_name}_Average7DayInvocationCount'] = average_seven_day_invocations
 
             # Compare last day's invocation count with the average of the previous 7 days
+            if isinstance(average_seven_day_invocations, float):
+                average_seven_day_invocations = f"{average_seven_day_invocations:.2f}"
             metrics[f'Lambda_{function_name}_InvocationComparison'] = (
                 f"Last day: {last_day_invocations}, Average of previous 7 days: {average_seven_day_invocations}"
             )
