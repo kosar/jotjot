@@ -35,13 +35,28 @@ SENDER_EMAIL = os.environ.get('SENDER_EMAIL', 'your_verified_email@example.com')
 def emit_maintenance_metrics(dynamodb_table_names, lambda_function_names):
     metrics = {}
     logger.info("Starting maintenance metrics collection")
+    overall_start_time = time.time()
 
     # Collect DynamoDB metrics
     dynamodb_client = boto3.client('dynamodb')
+    cloudwatch = boto3.client('cloudwatch')
     for table_name in dynamodb_table_names:
         try:
             response = dynamodb_client.describe_table(TableName=table_name)
             metrics[f'DynamoDB_{table_name}_ItemCount'] = response['Table']['ItemCount']
+
+            # Number of unique new rows added to dynamoDB tables (indicates activity)
+            response = cloudwatch.get_metric_statistics(
+                Namespace='AWS/DynamoDB',
+                MetricName='ConsumedWriteCapacityUnits',
+                Dimensions=[{'Name': 'TableName', 'Value': table_name}],
+                StartTime=datetime.now(timezone.utc) - timedelta(days=1),
+                EndTime=datetime.now(timezone.utc),
+                Period=86400,
+                Statistics=['Sum']
+            )
+            metrics[f'DynamoDB_{table_name}_ConsumedWriteCapacityUnits'] = response['Datapoints'][0]['Sum'] if response['Datapoints'] else 0
+
         except ClientError as e:
             logger.error(f"Failed to get DynamoDB metrics for table {table_name}: {e.response['Error']['Message']}")
             metrics[f'DynamoDB_{table_name}_ItemCount'] = 'Error'
@@ -82,9 +97,9 @@ def emit_maintenance_metrics(dynamodb_table_names, lambda_function_names):
             metrics[f'Lambda_{function_name}_InvocationCount'] = last_day_invocations
             logger.info(f"Time taken for last day invocation count: {time.time() - start_time} seconds")
 
-            # Invocation counts for the previous 7 days
+            # Invocation counts for the previous 3 days
             seven_day_invocations = []
-            for i in range(1, 8):
+            for i in range(1, 4):
                 start_time = time.time()
                 response = cloudwatch.get_metric_statistics(
                     Namespace='AWS/Lambda',
@@ -139,7 +154,35 @@ def emit_maintenance_metrics(dynamodb_table_names, lambda_function_names):
     admin_email = os.getenv('admin_email')
     if admin_email:
         try:
-            body = "<br>".join([f"{key}: {value}" for key, value in metrics.items()])
+            body = """
+            <html>
+            <head>
+                <style>
+                    table { font-family: Arial, sans-serif; border-collapse: collapse; width: 100%; }
+                    th, td { border: 1px solid #dddddd; text-align: left; padding: 8px; }
+                    th { background-color: #f2f2f2; }
+                </style>
+            </head>
+            <body>
+                <h2>Daily Maintenance Metrics</h2>
+                <table>
+                    <tr>
+                        <th>Metric</th>
+                        <th>Value</th>
+                    </tr>
+            """
+            for key, value in metrics.items():
+                body += f"""
+                    <tr>
+                        <td>{key}</td>
+                        <td>{value}</td>
+                    </tr>
+                """
+            body += """
+                </table>
+            </body>
+            </html>
+            """
             DailyReportHandler.send_email(SENDER_EMAIL, admin_email, "Daily Maintenance Metrics", body)
             logger.info(f"Metrics emailed to {admin_email}")
         except Exception as e:
@@ -150,6 +193,7 @@ def emit_maintenance_metrics(dynamodb_table_names, lambda_function_names):
             logger.info(f"{key}: {value}")
 
     logger.info("Maintenance metrics collection completed")
+    logger.info(f"Overall time taken for maintenance metrics collection: {time.time() - overall_start_time} seconds")
 
 def get_user_email_preference(user_id):
     try:
