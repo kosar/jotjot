@@ -32,6 +32,30 @@ SKILL_NAME = os.environ.get('SKILL_NAME', 'Daily Log')
 # Add these environment variables
 SENDER_EMAIL = os.environ.get('SENDER_EMAIL', 'your_verified_email@example.com')
 
+# Required permissions for the skill
+REQUIRED_PERMISSIONS = ["alexa::profile:timezone:read", "alexa::profile:email:read"]
+
+# Some global helper functions that are used in the handlers, candidates to be moved to a separate file or class
+def get_user_timezone(handler_input):
+    try:
+        service_client_factory = handler_input.service_client_factory
+        ups_service_client = service_client_factory.get_ups_service()
+        user_timezone = ups_service_client.get_system_time_zone(handler_input.request_envelope.context.system.api_access_token)
+        return user_timezone
+    except Exception as e:
+        logger.error(f"Error fetching user timezone: {str(e)}")
+        return 'America/Los_Angeles'  # Default to PST if there's an error
+
+def get_user_email(handler_input):
+    try:
+        service_client_factory = handler_input.service_client_factory
+        ups_service_client = service_client_factory.get_ups_service()
+        user_email = ups_service_client.get_profile_email(handler_input.request_envelope.context.system.api_access_token)
+        return user_email
+    except Exception as e:
+        logger.error(f"Error fetching user email: {str(e)}")
+        return None
+
 def emit_maintenance_metrics(dynamodb_table_names, lambda_function_names):
     metrics = {}
     logger.info("Starting maintenance metrics collection")
@@ -201,11 +225,57 @@ def get_user_email_preference(user_id):
         logger.error(f"Error fetching email preference for user {user_id}: {str(e)}")
         return False
 
+# Skill builder classes and handlers connected to the Alexa SDK Intent naming.
 class LaunchRequestHandler(AbstractRequestHandler):
     def can_handle(self, handler_input):
         return is_request_type("LaunchRequest")(handler_input)
 
+    def handle_permissions(self, handler_input):
+        # DynamoDB setup
+        dynamodb = boto3.resource('dynamodb')
+        table = dynamodb.Table('jotjot_UserEmailPreferences')
+
+        # Get user ID
+        user_id = handler_input.request_envelope.context.system.user.user_id
+
+        permissions = handler_input.request_envelope.context.system.user.permissions
+        if not permissions or not permissions.consent_token:
+            handler_input.response_builder.speak(
+                "Please enable permissions in the Amazon Alexa app."
+            ).set_card(
+                AskForPermissionsConsentCard(permissions=REQUIRED_PERMISSIONS)
+            )
+            return handler_input.response_builder.response
+
+        user_timezone = get_user_timezone(handler_input)
+        user_email = get_user_email(handler_input)
+
+        # Store user timezone and email in DynamoDB
+        table.put_item(Item={
+            'user_id': user_id,
+            'email_summary_enabled': False,
+            'first_seen': datetime.now(timezone.utc).isoformat(),
+            'timezone': user_timezone,
+            'email': user_email
+        })
+
+        handler_input.response_builder.speak("Welcome to the skill!")
+        return handler_input.response_builder.response
+
     def handle(self, handler_input):
+
+        # Add a new  up front permissions check to see if we have the permissions we need
+        # If we don't have the permissions we need, we will ask for them
+        # If we do have the permissions we need, we will continue on with the skill
+        permissions = handler_input.request_envelope.context.system.user.permissions
+        if not permissions or not permissions.consent_token:
+            handler_input.response_builder.speak(
+                "Please enable permissions in the Amazon Alexa app."
+            ).set_card(
+                AskForPermissionsConsentCard(permissions=REQUIRED_PERMISSIONS)
+            )
+            return handler_input.response_builder.response
+        
         # DynamoDB setup
         dynamodb = boto3.resource('dynamodb')
         table = dynamodb.Table('jotjot_UserEmailPreferences')
@@ -213,6 +283,10 @@ class LaunchRequestHandler(AbstractRequestHandler):
         # Get user ID
         user_id = handler_input.request_envelope.context.system.user.user_id
         
+        # Get user timezone and email or request access if not available
+        user_timezone = get_user_timezone(handler_input)
+        user_email = get_user_email(handler_input)
+
         # Attempt to retrieve the user's entry from DynamoDB
         response = table.get_item(Key={'user_id': user_id})
         
@@ -221,7 +295,9 @@ class LaunchRequestHandler(AbstractRequestHandler):
             table.put_item(Item={
                 'user_id': user_id,
                 'email_summary_enabled': False,
-                'first_seen': datetime.utcnow().isoformat()
+                'first_seen': datetime.now(timezone.utc).isoformat(),
+                'timezone': user_timezone,
+                'email': user_email
             })
             # Full welcome message for first-time users
             speak_output = f"Welcome to {SKILL_NAME}. Log anything by starting with 'Log that...' For example, you can say 'Open Daily Log, and log that I am taking my vitamins'."
@@ -232,7 +308,7 @@ class LaunchRequestHandler(AbstractRequestHandler):
         return (
             handler_input.response_builder
                 .speak(speak_output)
-                .ask("Log something starting with 'I am...' or ask for help.")
+                .ask("Log something starting with 'log that...' followed by what you are logging, or just ask for help.")
                 .set_should_end_session(False)
                 .response
         )
@@ -691,6 +767,20 @@ class GrantEmailPermissionIntentHandler(AbstractRequestHandler):
                 .response
         )
 
+class GrantTimezonePermissionIntentHandler(AbstractRequestHandler):
+    def can_handle(self, handler_input):
+        return is_intent_name("AMAZON.TimezonePermissionIntent")(handler_input)
+
+    def handle(self, handler_input):
+        permissions = ["alexa::devices:all:geolocation:read"]
+        return (
+            handler_input.response_builder
+                .speak("To provide timezone-specific features, I need permission to access your device's location. I've sent a card to your Alexa app to grant this permission.")
+                .set_card(AskForPermissionsConsentCard(permissions=permissions))
+                .response
+        )
+
+
 sb = CustomSkillBuilder(api_client=DefaultApiClient())
 # sb = SkillBuilder()
 
@@ -701,6 +791,7 @@ sb.add_request_handler(CancelOrStopIntentHandler())
 sb.add_request_handler(SessionEndedRequestHandler())
 sb.add_request_handler(GrantEmailPermissionIntentHandler())
 sb.add_request_handler(StopReportsIntentHandler())
+# sb.add_request_handler(GrantTimezonePermissionIntentHandler())
 sb.add_exception_handler(CatchAllExceptionHandler())
 
 def lambda_handler(event, context):
