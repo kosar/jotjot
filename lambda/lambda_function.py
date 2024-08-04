@@ -3,6 +3,7 @@ import logging
 import json
 import boto3
 import time
+import pytz
 from botocore.exceptions import ClientError
 from boto3.dynamodb.conditions import Key, Attr  # Import conditions module
 from ask_sdk_core.skill_builder import SkillBuilder
@@ -201,6 +202,17 @@ def get_user_email_preference(user_id):
         logger.error(f"Error fetching email preference for user {user_id}: {str(e)}")
         return False
 
+def get_user_timezone(handler_input):
+    try:
+        service_client_factory = handler_input.service_client_factory
+        ups_service_client = service_client_factory.get_ups_service()
+        user_timezone = "America/Los_Angeles"
+        # user_timezone = ups_service_client.get_system_time_zone(handler_input.request_envelope.context.system.api_access_token)
+        return user_timezone
+    except Exception as e:
+        logger.error(f"Exception in get_user_timezone - Error fetching user timezone: {str(e)}")
+        return 'America/Los_Angeles'  # Default to PST if there's an error
+
 class LaunchRequestHandler(AbstractRequestHandler):
     def can_handle(self, handler_input):
         return is_request_type("LaunchRequest")(handler_input)
@@ -244,9 +256,12 @@ class LogActivityIntentHandler(AbstractRequestHandler):
     def handle(self, handler_input):
         user_id = handler_input.request_envelope.session.user.user_id
         full_utterance = handler_input.request_envelope.request.intent.slots["utterance"].value
-        timestamp = datetime.now().isoformat()
 
-        parsed_data = self.basic_parse(full_utterance)        
+        # Get current time in user's timezone
+        user_timezone = get_user_timezone(handler_input)
+        tz = pytz.timezone(user_timezone)  # Use pytz to get the timezone object (must be packaged up with the lambda)
+        now = datetime.now(tz)
+        timestamp = now.isoformat()
         
         try:
             table = dynamodb.Table(table_name)
@@ -255,29 +270,18 @@ class LogActivityIntentHandler(AbstractRequestHandler):
                 'timestamp': timestamp,
                 'date': timestamp.split('T')[0],  # Extract date from ISO format
                 'utterance': full_utterance,
-                'parsed_data': json.dumps(parsed_data) # experimental storing of parsed data to attempt to create some structure for later querying
+                'timezone': user_timezone
             }
-            response = table.put_item(Item=item)
-            logger.info(f"Successfully logged to DynamoDB: {json.dumps(response)}")
-            
-            speak_output = f"Got it! Here is what I logged: {full_utterance}"
+            response = table.put_item(Item=item)            
+            speak_output = f"Got it!"
 
             try:
                 # update email permissions for this user given the handler_input
-                logger.info("LogActivityIntentHandler: Attempting to update email permissions")
-                update_status = self.update_email_permissions(handler_input)
-                logger.info(f"LogActivityIntentHandler: Email permission update status: {update_status}")
+                self.update_email_permissions(handler_input)
             except Exception as e:
                 logger.error(f"LogActivityIntentHandler: Error updating email permissions: {str(e)}")
                 # keep going even if email permission update fails, logging will catch and fix it later
                 # TODO: is this a good place to remind the user to enable their email permissions?
-            
-            # Check if the user has set up email preferences 
-            # TODO: refactor this to a separate function that is not annoying every time asking for email permission
-            if False:
-                email_preference = get_user_email_preference(user_id)
-                if not email_preference:
-                    speak_output += " By the way, if you'd like to receive daily report emails, please say 'use my email' to grant permission."
   
         except ClientError as e:
             logger.error(f"Error logging to DynamoDB: {e.response['Error']['Message']}")
@@ -296,31 +300,10 @@ class LogActivityIntentHandler(AbstractRequestHandler):
         except Exception as e:
             logger.warn(f"Error getting user's email: {str(e)}")
             return None
-
-    def basic_parse(self, utterance):
-        words = utterance.lower().split()
-        parsed = {}
-        for i, word in enumerate(words):
-            if word.isdigit():
-                parsed['amount'] = word
-                if i+1 < len(words):
-                    parsed['unit'] = words[i+1]
-            elif word in ['taking', 'applying', 'took', 'applied']:
-                parsed['action'] = word
-            elif word not in ['i\'m', 'i', 'am', 'the', 'a', 'an']:
-                parsed['substance'] = word
-        
-        # for development purposes, emit a detailed log of the parsed data here
-        logger.info(f"Parsed data: {parsed}")
-
-        return parsed
     
     def update_email_permissions(self, handler_input):
-        logger.info("Updating email permissions for user")
-
         # Get user ID
         user_id = handler_input.request_envelope.context.system.user.user_id
-        logger.info(f"User ID: {user_id}")
 
         # Initialize DynamoDB client
         dynamodb = boto3.resource('dynamodb')
@@ -331,15 +314,20 @@ class LogActivityIntentHandler(AbstractRequestHandler):
             service_client_factory = handler_input.service_client_factory
             ups_service = service_client_factory.get_ups_service()
             email = ups_service.get_profile_email()
+
+            # Get current time in user's timezone
+            user_timezone = get_user_timezone(handler_input)
+            tz = pytz.timezone(user_timezone)
+            now = datetime.now(tz)
+            timestamp = now.isoformat()
             
-            logger.info(f"Successfully retrieved user email: {email}")
             update_expression = 'SET email_summary_enabled = :val, email = :email, last_updated_email_permissions = :timestamp'
-            expression_values = {':val': True, ':email': email, ':timestamp': datetime.now(timezone.utc).isoformat()}
+            expression_values = {':val': True, ':email': email, ':timestamp': timestamp}
             
         except AskSdkException as ask_exception:
             logger.info(f"Error getting user email: {str(ask_exception)}")
             update_expression = 'SET email_summary_enabled = :val, email = :email, last_updated_email_permissions = :timestamp'
-            expression_values = {':val': False, ':email': '', ':timestamp': datetime.now(timezone.utc).isoformat()}
+            expression_values = {':val': False, ':email': '', ':timestamp': timestamp}
 
         try:
             # Perform the DynamoDB update
@@ -350,17 +338,20 @@ class LogActivityIntentHandler(AbstractRequestHandler):
                 ReturnValues="UPDATED_NEW"
             )
 
-            logger.info(f"DynamoDB update response: {response}")
-            logger.info(f"Updated email_summary_enabled to: {expression_values[':val']}")
-            logger.info(f"Updated email to: {expression_values[':email']}")
-            logger.info(f"Updated last_updated_email_permissions to: {expression_values[':timestamp']}")
+            # Check response and only log if it's not a success
+            if 'Attributes' not in response:
+                logger.error(f"Error updating email permissions for user {user_id}")
+                return False
 
         except ClientError as e:
             logger.info(f"Error updating DynamoDB: {str(e)}")
+            return False
         except Exception as e:
             logger.info(f"Unexpected error: {str(e)}")
+            return False
 
         logger.info("Email permission update process completed.")
+        return True
 
 class HelpIntentHandler(AbstractRequestHandler):
     def can_handle(self, handler_input):

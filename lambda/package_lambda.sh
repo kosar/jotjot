@@ -47,7 +47,11 @@ source $VENV_NAME/bin/activate
 # Install dependencies
 echo_message "Creating requirements.txt..."
 echo "ask-sdk-core" > requirements.txt
+# also add pytz to this
+echo "pytz" >> requirements.txt
 echo_message "Installing dependencies..."
+# echo out the current requirements.txt file as we have it
+cat requirements.txt
 pip install -r requirements.txt -t .
 
 # Package the Lambda function
@@ -62,4 +66,4 @@ rm -rf $VENV_NAME
 
 # Clean up
 echo_message "Cleaning up temporary files..."
-rm -rf requirements.txt __pycache__ *.dist-info *.egg-info ask_sdk_core ask_sdk_model ask_sdk_runtime bin certifi charset_normalizer dateutil idna requests six.py urllib3
+rm -rf requirements.txt __pycache__ *.dist-info *.egg-info ask_sdk_core ask_sdk_model ask_sdk_runtime bin certifi charset_normalizer dateutil idna requests six.py urllib3 pytz
