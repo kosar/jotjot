@@ -202,16 +202,9 @@ def get_user_email_preference(user_id):
         logger.error(f"Error fetching email preference for user {user_id}: {str(e)}")
         return False
 
-def get_user_timezone(handler_input):
-    try:
-        service_client_factory = handler_input.service_client_factory
-        ups_service_client = service_client_factory.get_ups_service()
-        user_timezone = "America/Los_Angeles"
-        # user_timezone = ups_service_client.get_system_time_zone(handler_input.request_envelope.context.system.api_access_token)
-        return user_timezone
-    except Exception as e:
-        logger.error(f"Exception in get_user_timezone - Error fetching user timezone: {str(e)}")
-        return 'America/Los_Angeles'  # Default to PST if there's an error
+def get_user_timezone(context_object):
+    # TODO: add an actual user level method to find the timezone using some context_object like handler_input or user_id (TBD)
+    return 'America/Los_Angeles'  # Default to PST if there's an error
 
 class LaunchRequestHandler(AbstractRequestHandler):
     def can_handle(self, handler_input):
@@ -431,8 +424,13 @@ class DailyReportHandler:
                     logger.error(f"send_daily_report: User {user_id} has no email address set up")
                     continue
                 
-                # Fetch logs for the user from yesterday
-                yesterday = (datetime.now() - timedelta(days=1)).strftime('%Y-%m-%d')
+                # Get current time in user's timezone
+                user_timezone = get_user_timezone(user_id)
+                tz = pytz.timezone(user_timezone)
+                now = datetime.now(tz)
+
+                # get yesterday's date from now using the user's timezone using pytz
+                yesterday = (now - timedelta(days=1)).strftime('%Y-%m-%d')
                 response_items = DailyReportHandler.get_all_user_log_entries_for_date(yesterday, user_id=user_id)
                 logger.info(f"send_daily_report: Found {len(response_items)} logs for user {user_id} on {yesterday}")
                 
