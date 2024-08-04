@@ -569,6 +569,8 @@ class DailyReportHandler:
             </div>
             <div class="footer">
                 <p>If you encounter any issues, please <a href="{github_issues_link}">file an issue</a>.</p>
+                <br/>
+                <p>Note that the timestamp is in Pacific Timezone. To update the skill to your timezone please file an issue (this will be fixed in a future iteration)</p>
             </div>
         </body>
         </html>
