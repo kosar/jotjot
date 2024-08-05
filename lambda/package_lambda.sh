@@ -13,10 +13,16 @@ function echo_message {
 
 # Function to clean up in case of errors
 function cleanup {
-    echo_message "Cleaning up..."
-    deactivate || true
-    rm -rf $VENV_NAME
-    rm -rf requirements.txt __pycache__ *.dist-info *.egg-info ask_sdk_core ask_sdk_model ask_sdk_runtime bin certifi charset_normalizer dateutil idna requests six.py urllib3
+    echo_message "central clean up: Cleaning up..."
+    if [ -d "$VENV_NAME" ]; then
+        source $VENV_NAME/bin/activate && deactivate || true
+        rm -rf $VENV_NAME
+    else
+        echo_message "central clean up: Virtual environment $VENV_NAME not found."
+    fi
+
+    echo_message "central cleanup: Removing temporary files..."
+    rm -rf requirements.txt __pycache__ *.dist-info *.egg-info ask_sdk_core ask_sdk_model ask_sdk_runtime bin certifi charset_normalizer dateutil idna requests six.py urllib3 pytz
 }
 
 # Trap errors and run cleanup
@@ -56,7 +62,8 @@ pip install -r requirements.txt -t .
 
 # Package the Lambda function
 echo_message "Packaging the Lambda function into lambda_package.zip..."
-zip -r lambda_package.zip .
+# skip any files that end in 'accessKeys.csv' as we don't want to package that up
+zip -r lambda_package.zip * -x *accessKeys.csv
 
 # Deactivate and remove the virtual environment
 echo_message "Deactivating virtual environment..."
