@@ -24,17 +24,15 @@
                         }
                     ],
                     "samples": [
+                        "note {utterance}",
+                        "log {utterance}",
+                        "Note that {utterance}",
+                        "Add {utterance}",
+                        "log that {utterance}",
+                        "add that {utterance}",
                         "please log that {utterance}",
                         "enter into the log {utterance}",
-                        "I am applying {utterance}",
-                        "I'm {utterance}",
-                        "Record that {utterance}",
-                        "I am taking {utterance}",
-                        "I'm taking {utterance}",
-                        "I'm applying {utterance}",
-                        "Log {utterance}",
-                        "Jot down {utterance}",
-                        "Note that {utterance}"
+                        "Record that {utterance}"
                     ]
                 },
                 {
@@ -42,34 +40,20 @@
                     "samples": []
                 },
                 {
-                    "name": "ToggleEmailSummaryIntent",
-                    "slots": [
-                        {
-                            "name": "toggle_state",
-                            "type": "toggle_state"
-                        }
-                    ],
-                    "samples": [
-                        "email summaries {toggle_state}",
-                        "{toggle_state} email summaries",
-                        "turn email summaries {toggle_state}",
-                        "turn {toggle_state} email summaries"
-                    ]
-                },
-                {
                     "name": "GrantEmailPermissionIntent",
                     "slots": [],
                     "samples": [
-                        "begin sending me reports"
+                        "enable sending logs to my email",
+                        "enable sending me daily logs to my email",
+                        "send me daily log reports to my email",
+                        "send daily log reports to my email"
                     ]
                 },
                 {
                     "name": "StopReportsIntent",
                     "slots": [],
                     "samples": [
-                        "turn off daily reports",
-                        "stop sending reports",
-                        "disable email reports"
+                        "Disable sending daily reports email"
                     ]
                 }
             ],
