@@ -74,3 +74,9 @@ rm -rf $VENV_NAME
 # Clean up
 echo_message "Cleaning up temporary files..."
 rm -rf requirements.txt __pycache__ *.dist-info *.egg-info ask_sdk_core ask_sdk_model ask_sdk_runtime bin certifi charset_normalizer dateutil idna requests six.py urllib3 pytz
+
+# Upload if requested
+if [[ $1 == "--upload" ]]; then
+    echo_message "Uploading the package to AWS Lambda..."
+    ./deploy_lambda.sh --upload JotJotFunction
+fi
